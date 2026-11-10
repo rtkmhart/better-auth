@@ -51,6 +51,7 @@ import {
 } from "./par";
 import { registerEndpoint } from "./register";
 import {
+	EMPTY_ALLOWED_SCOPES_MESSAGE,
 	logEnforcePerClientResourcesResolution,
 	logStartupSeedFailure,
 	seedResourcesOnce,
@@ -210,6 +211,15 @@ export const oauthProvider = <O extends OAuthOptions<Scope[]>>(options: O) => {
 					`${optionName} resource ${identifier} not found in resources`,
 				);
 			}
+		}
+	}
+
+	for (const resource of options.resources ?? []) {
+		if (typeof resource === "string") continue;
+		if (resource.allowedScopes?.length === 0) {
+			throw new BetterAuthError(
+				`resources entry ${resource.identifier}: ${EMPTY_ALLOWED_SCOPES_MESSAGE}`,
+			);
 		}
 	}
 
