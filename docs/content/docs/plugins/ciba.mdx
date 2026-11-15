@@ -451,7 +451,7 @@ The plugin adds one model, `cibaRequest`:
 * **The binding message ties the two devices together.** Ask clients to send a short, random `binding_message` and to display it, so the user can tell their request apart from one someone else started at the same moment. Render it as text.
 * **Authorization details come from the client.** The provider checks only their shape and type, and leaves each field to your `validate`. Validate strictly, render them as text, and have your API enforce the granted details itself.
 * **The ping callback only reaches safe endpoints.** Registration and each request check that the notification endpoint is absolute `https` on a public host, with no credentials or fragment, the same rules as `backchannel_logout_uri`. The check does not resolve DNS, so restrict outbound network access where you can.
-* **Tokens are issued once.** An approved request is claimed and deleted in one atomic step, so of two concurrent polls only one receives tokens. The `auth_req_id` is stored hashed.
+* **Tokens are issued once.** An approved request is claimed and deleted in one atomic step, so of two concurrent polls only one receives tokens. The claim comes after [`beforeTokenIssuance`](/docs/plugins/oauth-provider/tokens#refuse-token-issuance), so a refusal there keeps the request approved. The `auth_req_id` is stored hashed.
 
 ## Current limitations
 
