@@ -51,13 +51,22 @@ export const ciba = (options: CibaOptions) => {
 		expiresIn: options.expiresIn ?? 300,
 		interval: options.interval ?? 5,
 	};
+	// The origins resolved at initialization. Ping delivery trusts only these,
+	// never the list a request resolves, which can come from request input such
+	// as the Host header and so from the party the delivery check defends
+	// against.
+	let configuredOrigin = (_url: string) => false;
+	const isConfiguredOrigin = (url: string) => configuredOrigin(url);
 	const extension: OAuthProviderExtension = {
 		name: "ciba",
 		grants: {
 			[CIBA_GRANT_TYPE]: createCibaGrantHandler(resolvedOptions),
 		},
 		interactionRequests: {
-			[APPROVAL_PARAMETER]: cibaApprovalRequest(options.resultPage),
+			[APPROVAL_PARAMETER]: cibaApprovalRequest(
+				options.resultPage,
+				isConfiguredOrigin,
+			),
 		},
 		clientMetadata: {
 			// CIBA §4 and RFC 9396 §10: clients register these through dynamic
@@ -97,11 +106,15 @@ export const ciba = (options: CibaOptions) => {
 		// `mergeSchema` applies overrides in place, so merge into a copy.
 		schema: mergeSchema(structuredClone(schema), options.schema),
 		init(ctx) {
+			configuredOrigin = (url) => ctx.isTrustedOrigin(url);
 			extendOAuthProvider(ctx, extension);
 		},
 		endpoints: {
 			bcAuthorize: createBcAuthorize(resolvedOptions),
-			completeCibaRequest: createCompleteCibaRequest(resolvedOptions),
+			completeCibaRequest: createCompleteCibaRequest(
+				resolvedOptions,
+				isConfiguredOrigin,
+			),
 		},
 		// Each request notifies a user, so it gets a tighter limit than the
 		// generic per-IP default.
