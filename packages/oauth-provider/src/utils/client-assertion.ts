@@ -27,7 +27,13 @@ import type {
 } from "../types";
 import { challengeHeaders, getAuthEndpointUrl, getClient } from "./index";
 
-type JwksCache = Map<string, { jwks: JSONWebKeySet; fetchedAt: number }>;
+type JwksCacheEntry = {
+	jwks: JSONWebKeySet;
+	fetchedAt: number;
+	/** Start time of the last unknown-key refetch, whatever its outcome. */
+	refetchedAt: number;
+};
+type JwksCache = Map<string, JwksCacheEntry>;
 type FetchedJwksResult =
 	| { valid: true; jwks: JSONWebKeySet }
 	| { valid: false };
@@ -36,6 +42,10 @@ type FetchedJwksResult =
 const jwksCaches = new WeakMap<OAuthOptions<Scope[]>, JwksCache>();
 const JWKS_CACHE_TTL_MS = 5 * 60 * 1000;
 const JWKS_CACHE_MAX_ENTRIES = 500;
+// Minimum spacing between unknown-key refetches of one key set. Bounds how
+// often assertions naming keys the client never published make the provider
+// call out.
+const JWKS_REFETCH_COOLDOWN_MS = 60 * 1000;
 const JWKS_FETCH_TIMEOUT_MS = 5_000;
 const MAX_JWKS_RESPONSE_BYTES = 64 * 1024;
 const JSON_CONTENT_TYPE = /^application\/(?:[-\w.]+\+)?json\s*(?:;|$)/i;
@@ -46,7 +56,8 @@ function setJwksCache(
 	jwks: JSONWebKeySet,
 	fetchedAt: number,
 ) {
-	jwksCache.set(cacheKey, { jwks, fetchedAt });
+	const refetchedAt = jwksCache.get(cacheKey)?.refetchedAt ?? 0;
+	jwksCache.set(cacheKey, { jwks, fetchedAt, refetchedAt });
 	if (jwksCache.size > JWKS_CACHE_MAX_ENTRIES) {
 		// Evict oldest entry (Map iterates in insertion order)
 		const oldest = jwksCache.keys().next().value;
@@ -292,6 +303,10 @@ async function fetchClientJwks(
 /**
  * Refetch JWKS from jwks_uri when signature verification fails with cached keys.
  * Handles key rotation: the client may have published a new key that isn't in our cache yet.
+ *
+ * A refetch goes out only if no other unknown-key refetch of this `jwks_uri`
+ * started within `JWKS_REFETCH_COOLDOWN_MS`. A refetch consumes the cooldown
+ * whether or not it succeeds.
  */
 async function refetchClientJwks(
 	opts: OAuthOptions<Scope[]>,
@@ -305,6 +320,12 @@ async function refetchClientJwks(
 		: undefined;
 	if (client.clientDiscoveryId && !discovery?.fetchClientMetadataResource) {
 		return null;
+	}
+	const cached = getJwksCache(opts).get(getJwksCacheKey(client));
+	if (cached) {
+		const now = Date.now();
+		if (now - cached.refetchedAt < JWKS_REFETCH_COOLDOWN_MS) return null;
+		cached.refetchedAt = now;
 	}
 	try {
 		const result = await fetchJwksFromUri(

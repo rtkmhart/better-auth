@@ -12,6 +12,7 @@ import { generateRandomString } from "better-auth/crypto";
 import { createAuthorizationURL } from "better-auth/oauth2";
 import { jwt } from "better-auth/plugins/jwt";
 import { getTestInstance } from "better-auth/test";
+import type { JWK } from "jose";
 import { exportJWK, generateKeyPair, SignJWT } from "jose";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { oauthProviderClient } from "./client";
@@ -371,6 +372,161 @@ describe("private_key_jwt authentication", async () => {
 
 		expect(transportA).toHaveBeenCalledTimes(1);
 		expect(transportB).toHaveBeenCalledTimes(1);
+	});
+
+	describe("jwks_uri refetch cooldown", () => {
+		async function setup(name: string) {
+			const clientId = `https://${name}.example.com/client.json`;
+			const [oldPair, newPair] = await Promise.all([
+				generateKeyPair("RS256", { extractable: true }),
+				generateKeyPair("RS256", { extractable: true }),
+			]);
+			const [oldJwk, newJwk] = await Promise.all([
+				exportJWK(oldPair.publicKey),
+				exportJWK(newPair.publicKey),
+			]);
+			const published: JWK[] = [{ ...oldJwk, kid: "old", alg: "RS256" }];
+			const transport = vi
+				.fn()
+				.mockImplementation(() =>
+					Promise.resolve(Response.json({ keys: published })),
+				);
+			const provider = await createDiscoveredClientVerifier({
+				baseURL: `https://${name}-provider.example.com`,
+				clientId,
+				clientDiscoveryId: `${name}-discovery`,
+				fetchClientMetadataResource: transport,
+				jwksUri: `https://${name}.example.com/jwks.json`,
+			});
+			const verify = async (keyId: string, key: CryptoKey) =>
+				verifyClientAssertion(
+					provider.ctx,
+					provider.opts,
+					await signDiscoveredClientAssertion({
+						audience: provider.issuer,
+						clientId,
+						key,
+						keyId,
+					}),
+					CLIENT_ASSERTION_TYPE,
+					clientId,
+				);
+			return {
+				clientId,
+				oldKey: oldPair.privateKey as CryptoKey,
+				newKey: newPair.privateKey as CryptoKey,
+				publishNewKey: () =>
+					published.push({ ...newJwk, kid: "new", alg: "RS256" }),
+				transport,
+				verify,
+			};
+		}
+
+		afterEach(() => {
+			vi.useRealTimers();
+		});
+
+		it("refetches once when the kid is not in the cached key set", async () => {
+			const fixture = await setup("cooldown-rotation");
+			await fixture.verify("old", fixture.oldKey);
+			expect(fixture.transport).toHaveBeenCalledTimes(1);
+
+			fixture.publishNewKey();
+			await expect(
+				fixture.verify("new", fixture.newKey),
+			).resolves.toMatchObject({ clientId: fixture.clientId });
+			expect(fixture.transport).toHaveBeenCalledTimes(2);
+
+			await fixture.verify("new", fixture.newKey);
+			expect(fixture.transport).toHaveBeenCalledTimes(2);
+		});
+
+		it("does not refetch again within the cooldown", async () => {
+			vi.useFakeTimers({ toFake: ["Date"] });
+			const fixture = await setup("cooldown-repeat");
+			await fixture.verify("old", fixture.oldKey);
+
+			await expect(
+				fixture.verify("ghost", fixture.oldKey),
+			).rejects.toBeDefined();
+			expect(fixture.transport).toHaveBeenCalledTimes(2);
+			await expect(
+				fixture.verify("ghost", fixture.oldKey),
+			).rejects.toBeDefined();
+			await expect(
+				fixture.verify("ghost-2", fixture.oldKey),
+			).rejects.toBeDefined();
+			expect(fixture.transport).toHaveBeenCalledTimes(2);
+
+			vi.setSystemTime(Date.now() + 60_000 + 1);
+			await expect(
+				fixture.verify("ghost", fixture.oldKey),
+			).rejects.toBeDefined();
+			expect(fixture.transport).toHaveBeenCalledTimes(3);
+		});
+
+		it("rejects an assertion signed with a key published during the cooldown, then accepts it after", async () => {
+			vi.useFakeTimers({ toFake: ["Date"] });
+			const fixture = await setup("cooldown-new-key");
+			await fixture.verify("old", fixture.oldKey);
+			await expect(
+				fixture.verify("ghost", fixture.oldKey),
+			).rejects.toBeDefined();
+
+			fixture.publishNewKey();
+			await expect(fixture.verify("new", fixture.newKey)).rejects.toBeDefined();
+			expect(fixture.transport).toHaveBeenCalledTimes(2);
+
+			vi.setSystemTime(Date.now() + 60_000 + 1);
+			await expect(
+				fixture.verify("new", fixture.newKey),
+			).resolves.toMatchObject({ clientId: fixture.clientId });
+			expect(fixture.transport).toHaveBeenCalledTimes(3);
+		});
+
+		it.each([
+			{
+				name: "fails",
+				response: () => new Response("nope", { status: 500 }),
+			},
+			{
+				name: "returns an invalid key set",
+				response: () => Response.json({ keys: "not-an-array" }),
+			},
+		])(
+			"counts a refetch that $name toward the cooldown",
+			async ({ response }) => {
+				const fixture = await setup("cooldown-failed-refetch");
+				await fixture.verify("old", fixture.oldKey);
+				fixture.transport.mockImplementationOnce(() =>
+					Promise.resolve(response()),
+				);
+
+				await expect(
+					fixture.verify("new", fixture.newKey),
+				).rejects.toBeDefined();
+				expect(fixture.transport).toHaveBeenCalledTimes(2);
+
+				fixture.publishNewKey();
+				await expect(
+					fixture.verify("new", fixture.newKey),
+				).rejects.toBeDefined();
+				expect(fixture.transport).toHaveBeenCalledTimes(2);
+			},
+		);
+
+		it("does not start the cooldown for a known kid with a bad signature", async () => {
+			const fixture = await setup("cooldown-known-kid");
+			await fixture.verify("old", fixture.oldKey);
+			await expect(fixture.verify("old", fixture.newKey)).rejects.toBeDefined();
+			expect(fixture.transport).toHaveBeenCalledTimes(1);
+
+			fixture.publishNewKey();
+			await expect(
+				fixture.verify("new", fixture.newKey),
+			).resolves.toMatchObject({ clientId: fixture.clientId });
+			expect(fixture.transport).toHaveBeenCalledTimes(2);
+		});
 	});
 
 	it.each([
