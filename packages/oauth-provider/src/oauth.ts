@@ -263,6 +263,16 @@ export const oauthProvider = <O extends OAuthOptions<Scope[]>>(options: O) => {
 		);
 	}
 
+	if (
+		opts.accessTokenMaxExpiresIn !== undefined &&
+		(!Number.isSafeInteger(opts.accessTokenMaxExpiresIn) ||
+			opts.accessTokenMaxExpiresIn <= 0)
+	) {
+		throw new BetterAuthError(
+			"accessTokenMaxExpiresIn must be a positive integer number of seconds",
+		);
+	}
+
 	const dpopNonceExpiresIn = opts.dpop?.nonce?.expiresIn;
 	if (
 		dpopNonceExpiresIn !== undefined &&
