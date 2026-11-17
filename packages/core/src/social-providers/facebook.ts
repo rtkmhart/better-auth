@@ -10,6 +10,7 @@ import {
 	validateAuthorizationCode,
 } from "../oauth2";
 import { fetchRefusingRedirects } from "../oauth2/reject-redirects";
+import { appendQueryParams } from "../utils/url";
 export interface FacebookGraphProfile {
 	id: string;
 	name: string;
@@ -43,6 +44,16 @@ interface FacebookDebugTokenData {
 }
 
 /**
+ * `debug_token` sits next to the Graph `/me` endpoint, so a `userInfoEndpoint`
+ * override moves it too.
+ */
+function debugTokenEndpoint(options: FacebookOptions) {
+	return options.userInfoEndpoint
+		? new URL("debug_token", options.userInfoEndpoint).href
+		: "https://graph.facebook.com/debug_token";
+}
+
+/**
  * Validate an opaque Facebook access token against the configured app.
  *
  * Facebook access tokens are not audience-bound at the Graph `/me` endpoint: a
@@ -71,7 +82,7 @@ async function verifyFacebookAccessToken(
 	const appAccessToken = `${primaryClientId}|${options.clientSecret}`;
 	const { data, error } = await fetchRefusingRedirects<{
 		data?: FacebookDebugTokenData;
-	}>("https://graph.facebook.com/debug_token", {
+	}>(debugTokenEndpoint(options), {
 		query: {
 			input_token: accessToken,
 			access_token: appAccessToken,
@@ -242,10 +253,11 @@ export const facebook = (options: FacebookOptions) => {
 				"picture",
 				...(options?.fields || []),
 			];
-			const userInfoUrl = new URL(userInfoEndpoint);
-			userInfoUrl.searchParams.set("fields", fields.join(","));
 			const { data: profile, error } = await betterFetch<FacebookGraphProfile>(
-				userInfoUrl.toString(),
+				appendQueryParams(
+					userInfoEndpoint,
+					new URLSearchParams({ fields: fields.join(",") }),
+				),
 				{
 					auth: {
 						type: "Bearer",

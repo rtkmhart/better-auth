@@ -157,7 +157,7 @@ export const kakao = (options: KakaoOptions) => {
 				return options.getUserInfo(token);
 			}
 			const { data: profile, error } = await betterFetch<KakaoProfile>(
-				"https://kapi.kakao.com/v2/user/me",
+				options.userInfoEndpoint ?? "https://kapi.kakao.com/v2/user/me",
 				{
 					headers: {
 						Authorization: `Bearer ${token.accessToken}`,
