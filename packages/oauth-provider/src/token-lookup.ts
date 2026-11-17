@@ -9,13 +9,14 @@ import {
 	errors as joseErrors,
 	jwtVerify,
 } from "jose";
+import { getAcceptedIssuers } from "./issuer";
 import type {
 	OAuthOpaqueAccessToken,
 	OAuthOptions,
 	OAuthRefreshToken,
 	Scope,
 } from "./types";
-import { getJwksSource, getJwtPlugin, getStoredToken } from "./utils";
+import { getJwksSource, getStoredToken } from "./utils";
 
 /** Signature, issuer, and `azp` are verified; audience and client are not. */
 export type JwtAccessTokenPayload = JWTPayload & { azp: string; sid?: string };
@@ -61,14 +62,13 @@ async function verifyJwtAccessToken(
 	} catch {
 		return null;
 	}
-	const jwtPluginOptions = getJwtPlugin(ctx.context).options;
 	const jwks = await getJwks(token, getJwksSource(ctx));
 	let payload: JWTPayload;
 	try {
 		// Do not pass jose's `audience` option: access-token audiences are
 		// resource identifiers, which each endpoint validates itself.
 		({ payload } = await jwtVerify(token, createLocalJWKSet(jwks), {
-			issuer: jwtPluginOptions?.jwt?.issuer ?? ctx.context.baseURL,
+			issuer: getAcceptedIssuers(ctx.context, opts),
 		}));
 	} catch (error) {
 		// jose checks claims only after the signature verifies. `JWTExpired` is

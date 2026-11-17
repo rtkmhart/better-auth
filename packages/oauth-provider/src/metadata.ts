@@ -5,13 +5,13 @@ import {
 } from "@better-auth/core/oauth2";
 import type { JWSAlgorithms, JwtOptions } from "better-auth/plugins";
 import { getAcrValuesSupported } from "./authentication-context";
-import { validateIssuerUrl } from "./authorize";
 import {
 	applyOAuthProviderMetadataExtensions,
 	getClientDiscoveries,
 	getSupportedAuthMethods,
 	getSupportedGrantTypes,
 } from "./extensions";
+import { validateIssuerUrl } from "./issuer";
 import {
 	isPushedAuthorizationRequestEnabled,
 	PUSHED_AUTHORIZATION_REQUEST_PATH,

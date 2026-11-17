@@ -18,6 +18,7 @@ import {
 	isValidOidcClaimsRequest,
 } from "./claims-request";
 import { getExtensionInteractionRequest } from "./extensions";
+import { getIssuer } from "./issuer";
 import { oauthAuthorizationServerMetadata } from "./metadata";
 import { oAuthState } from "./oauth";
 import type { OAuthErrorCode, OAuthRedirectOnError } from "./oauth-endpoint";
@@ -59,7 +60,6 @@ import {
 	findConsent,
 	getClient,
 	getConsentReferenceId,
-	getJwtPlugin,
 	isPKCERequired,
 	isRecord,
 	isRedirectUriTransportAllowed,
@@ -239,49 +239,6 @@ export function getAPIErrorURL(
 	return errorPage
 		? formatErrorURL(errorPage, code, description)
 		: getErrorURL(ctx, code, description);
-}
-
-/**
- * Normalizes the issuer URL by removing query and fragment components, which
- * RFC 8414 §2 forbids. The scheme is kept as configured: the issuer must match
- * the `iss` claim of issued tokens exactly (RFC 9207 §2.4).
- *
- * @returns The issuer URL without query, fragment, or trailing slash
- */
-export function validateIssuerUrl(issuer: string): string {
-	try {
-		const url = new URL(issuer);
-		url.search = "";
-		url.hash = "";
-
-		return url.toString().replace(/\/$/, "");
-	} catch {
-		// If URL parsing fails, return as-is
-		return issuer;
-	}
-}
-
-/**
- * Gets the issuer identifier
- */
-export function getIssuer(
-	ctx: GenericEndpointContext,
-	opts: OAuthOptions<Scope[]>,
-): string {
-	let issuer: string;
-
-	if (opts.disableJwtPlugin) {
-		issuer = ctx.context.baseURL;
-	} else {
-		try {
-			const jwtPluginOptions = getJwtPlugin(ctx.context).options;
-			issuer = jwtPluginOptions?.jwt?.issuer ?? ctx.context.baseURL;
-		} catch {
-			issuer = ctx.context.baseURL;
-		}
-	}
-
-	return validateIssuerUrl(issuer);
 }
 
 /**

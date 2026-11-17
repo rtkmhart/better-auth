@@ -13,7 +13,7 @@ Better Auth serves [OpenID Provider metadata](https://openid.net/specs/openid-co
 
 The OpenID configuration returns 404 when you set `scopes` without `openid`. To serve it, add `openid` to `scopes`.
 
-The issuer keeps the scheme of your `baseURL`, or of `jwt.issuer` when you set it, so discovery, the authorization response `iss` parameter, and issued tokens report the same value. If a proxy terminates TLS in front of Better Auth, set `baseURL` to the public `https` URL.
+The issuer comes from `jwt.issuer` when you set it, and otherwise from your `baseURL`. The provider removes a trailing slash, a query, and a fragment from that URL, lowercases its host, and drops a default port. It keeps the scheme. Discovery, the authorization response `iss` parameter, ID tokens, access tokens, introspection responses, and logout tokens all report this one value, as [OpenID Connect Discovery §4.3](https://openid.net/specs/openid-connect-discovery-1_0.html#ProviderConfigurationValidation) requires. Tokens issued by versions before 1.8 carry the URL as you configured it, and the provider's own checks, such as the `id_token_hint` check, accept both values. If a proxy terminates TLS in front of Better Auth, set `baseURL` to the public `https` URL.
 
 To publish fewer scopes, or more claims, than the server supports, set `advertisedMetadata`:
 

@@ -4,7 +4,6 @@ import {
 	formatErrorURL,
 	getAPIErrorURL,
 	getErrorURL,
-	getIssuer,
 	resolveTrustedRedirectUri,
 } from "./authorize";
 import {
@@ -13,6 +12,7 @@ import {
 } from "./claims-request";
 import type { AuthorizeEndpointCaller } from "./continue";
 import { getExtensionInteractionRequest } from "./extensions";
+import { getIssuer } from "./issuer";
 import { oAuthState } from "./oauth";
 import { getSupportedClaims } from "./standard-claims";
 import type { OAuthConsent, OAuthOptions, Scope } from "./types";

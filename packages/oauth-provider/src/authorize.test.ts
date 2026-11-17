@@ -8,9 +8,10 @@ import { jwt } from "better-auth/plugins/jwt";
 import { getTestInstance } from "better-auth/test";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import * as z from "zod";
-import { formatErrorURL, validateIssuerUrl } from "./authorize";
+import { formatErrorURL } from "./authorize";
 import { oauthProviderClient } from "./client";
 import { verifyOAuthQueryParams } from "./index";
+import { validateIssuerUrl } from "./issuer";
 import { oauthProvider } from "./oauth";
 import {
 	canonicalizeOAuthQueryParams,
