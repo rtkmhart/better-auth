@@ -490,6 +490,12 @@ When the OAuth provider runs in the same process, `requireMcpAuth` now checks ea
 
 **What to do:** expect a database read per request. Set `jwksUrl` to keep verifying JWT signatures alone. If a handler looks users up by `sub`, keep its clients on `subject_type: "public"`, or map pairwise subjects yourself.
 
+### The resource client and `requireMcpAuth` require `typ: at+jwt` for signature checks
+
+When `oauthProviderResourceClient` checks a JWT access token by its signature, it now defaults `verifyOptions.typ` to `at+jwt`. That is the case in `verifyAccessTokenRequest` and `verifyBearerToken` with `jwksUrl`, with `remoteVerify` unless you set `force`, and with a dynamic `baseURL`. `requireMcpAuth` requires it too when you set `jwksUrl`. A JWT without that header type now fails with `401 invalid_token`, even when its signature, `iss`, and `aud` match. `verifyAccessTokenRequest` and `verifyBearerToken` from `better-auth/oauth2` are unchanged and check `typ` only when you pass it.
+
+**What to do:** nothing for tokens your provider issues. If the resource client verifies tokens from another issuer that does not set `typ: at+jwt`, pass that issuer's value as `verifyOptions.typ`.
+
 ### `authorization_details_types_supported` is a list
 
 In protected resource metadata, `authorization_details_types_supported` is now typed as `string[]`, as RFC 9728 requires. Before, it accepted a single string, which produced metadata that was not a valid JSON array.
