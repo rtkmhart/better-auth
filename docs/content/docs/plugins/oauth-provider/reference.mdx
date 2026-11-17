@@ -208,9 +208,9 @@ Protected resources seeded into `oauthResource` at startup. See [Resources](/doc
 
 How seeding treats existing rows: skip them, update only the configured fields, or replace them. Defaults to `"insertOnly"`.
 
-`resourceDefaults` <span className="opacity-70">`{ accessTokenFormat? }`</span>
+`resourceDefaults` <span className="opacity-70">`{ accessTokenFormat?, signingAlgorithm?, signingKeyId? }`</span>
 
-Access token format for every resource that does not set its own. `accessTokenFormat` is `"jwt"` or `"opaque"` and defaults to `"jwt"`. See [Access token format](/docs/plugins/oauth-provider/tokens#access-token-format).
+Access token format and signing for every resource that does not set its own. `accessTokenFormat` defaults to `"jwt"`. The signing fields default to the JWT plugin's primary key, which ID tokens always use. A resource that sets either signing field replaces both defaults. See [Access token format](/docs/plugins/oauth-provider/tokens#access-token-format) and [Access token signing](/docs/plugins/oauth-provider/tokens#access-token-signing).
 
 `enforcePerClientResources` <span className="opacity-70">`boolean`</span>
 
