@@ -61,11 +61,13 @@ async function bootScenario(
 	exchange: OAuthTokenExchangeOptions = {},
 	{
 		disableJwtPlugin = false,
+		jwtIssuer = issuer,
 		testWith,
 		plugins = [],
 		advanced,
 	}: {
 		disableJwtPlugin?: boolean;
+		jwtIssuer?: string;
 		testWith?: "sqlite" | "postgres" | "mongodb" | "mysql";
 		plugins?: BetterAuthPlugin[];
 		advanced?: BetterAuthOptions["advanced"];
@@ -90,7 +92,7 @@ async function bootScenario(
 				baseURL: issuer,
 				advanced,
 				plugins: [
-					...(disableJwtPlugin ? [] : [jwt({ jwt: { issuer } })]),
+					...(disableJwtPlugin ? [] : [jwt({ jwt: { issuer: jwtIssuer } })]),
 					oauthProvider(opts),
 					oauthTokenExchange(exchange),
 					...plugins,
@@ -2156,16 +2158,14 @@ describe("oauthTokenExchange delegation", () => {
 	});
 
 	describe("may_act", () => {
-		const bootWithMayAct = async () => {
+		const bootWithMayAct = async (
+			bootOptions: Parameters<typeof bootScenario>[1] = {},
+		) => {
 			const state: { mayAct?: unknown } = {};
-			const scenario = await bootDelegation(
-				{},
-				{},
-				{
-					customAccessTokenClaims: () =>
-						state.mayAct === undefined ? {} : { may_act: state.mayAct },
-				},
-			);
+			const scenario = await bootDelegation({}, bootOptions, {
+				customAccessTokenClaims: () =>
+					state.mayAct === undefined ? {} : { may_act: state.mayAct },
+			});
 			return { ...scenario, state };
 		};
 
@@ -2183,6 +2183,21 @@ describe("oauthTokenExchange delegation", () => {
 				sub: delegator.client_id,
 				sub_profile: "service",
 			});
+		});
+
+		// Tokens carry the normalized issuer, while a `may_act` built from
+		// `jwt.issuer` carries it as configured.
+		it.each([
+			["as configured", `${issuer}/`],
+			["normalized", issuer],
+		])("allows an iss that names this server %s", async (_, mayActIssuer) => {
+			const { delegator, delegate, state } = await bootWithMayAct({
+				jwtIssuer: `${issuer}/`,
+			});
+			state.mayAct = { client_id: delegator.client_id, iss: mayActIssuer };
+			const { data, error } = await delegate();
+			expect(error).toBeNull();
+			expect(decodeJwt(data!.access_token).iss).toBe(issuer);
 		});
 
 		it.each<[string, Record<string, string> | string]>([
