@@ -444,6 +444,8 @@ To let users list and change their consents, use these endpoints. Each requires 
 
 Updated scopes must be allowed for the client. Deleting a consent makes the next authorization ask again, and revokes the access and refresh tokens issued under it. Tokens the user holds for the same client under another consent reference stay valid. See [Revoke tokens with a consent](/docs/plugins/oauth-provider/tokens#revoke-tokens-with-a-consent).
 
+A pending authorization code follows the consent. Redeeming a code needs a stored consent for the code's user, client, and consent reference that still covers its scopes, resources, and UserInfo claims. Once the user deletes the consent, or narrows it below what the code authorizes, redeeming the code fails with `invalid_grant`. A consent that was deleted and then given again for the same request leaves the code valid, because the user approved the same access again. A client with `skip_consent` has no consent to check. A redemption that passed this check just before the consent was deleted can still finish, and the tokens it issues stay valid.
+
 ```ts title="consents.ts"
 const { error } = await authClient.oauth2.updateConsent({
   id: consentId,
