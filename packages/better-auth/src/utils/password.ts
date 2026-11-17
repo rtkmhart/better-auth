@@ -36,6 +36,10 @@ export function assertPasswordNotTooLong(
  * Sessions are revoked before the write so that on an adapter without
  * transactions a failure still keeps the old password rather than committing a
  * new one while existing sessions stay valid.
+ *
+ * Each plugin's `onPasswordReset` then runs, after the commit, so a plugin
+ * that revokes its own credentials sees the new password and the revoked
+ * sessions. It runs even when the user had no live session.
  */
 export async function resetCredentialPassword(
 	ctx: GenericEndpointContext,
@@ -61,6 +65,9 @@ export async function resetCredentialPassword(
 		}
 		await ctx.context.internalAdapter.updatePassword(userId, passwordHash);
 	});
+	for (const plugin of ctx.context.options.plugins ?? []) {
+		await plugin.onPasswordReset?.({ userId }, ctx);
+	}
 }
 
 export async function validatePassword(
